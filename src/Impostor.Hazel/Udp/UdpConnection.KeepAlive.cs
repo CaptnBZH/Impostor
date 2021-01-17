@@ -60,7 +60,7 @@ namespace Impostor.Hazel.Udp
         }
         private int keepAliveInterval = 1500;
 
-        public int MissingPingsUntilDisconnect { get; set; } = 6;
+        public int MissingPingsUntilDisconnect { get; set; } = 10;
         private volatile int pingsSinceAck = 0;
 
         /// <summary>

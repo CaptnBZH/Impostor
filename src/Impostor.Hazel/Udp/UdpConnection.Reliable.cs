@@ -77,7 +77,7 @@ namespace Impostor.Hazel.Udp
         ///     connection will be marked as disconnected and the <see cref="Connection.Disconnected">Disconnected</see> event
         ///     will be invoked.
         /// </remarks>
-        public volatile int DisconnectTimeout = 5000;
+        public volatile int DisconnectTimeout = 10000;
 
         /// <summary>
         ///     Class to hold packet data
