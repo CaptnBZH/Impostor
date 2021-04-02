@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Impostor.Api.Games;
 using Impostor.Api.Innersloth;
 using Impostor.Api.Net;
 using Impostor.Api.Net.Messages;
+using Impostor.Api.Reactor;
 using Impostor.Hazel;
 using Impostor.Server.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,90 +27,6 @@ namespace Impostor.Server.Net.State
             await SendToAllAsync(packet);
 
             await _eventManager.CallAsync(new GameStartingEvent(this));
-        }
-
-        public async ValueTask<GameJoinResult> AddClientAsync(ClientBase client)
-        {
-            var hasLock = false;
-
-            try
-            {
-                hasLock = await _clientAddLock.WaitAsync(TimeSpan.FromMinutes(1));
-
-                if (hasLock)
-                {
-                    return await AddClientSafeAsync(client);
-                }
-            }
-            finally
-            {
-                if (hasLock)
-                {
-                    _clientAddLock.Release();
-                }
-            }
-
-            return GameJoinResult.FromError(GameJoinError.InvalidClient);
-        }
-
-        private async ValueTask<GameJoinResult> AddClientSafeAsync(ClientBase client)
-        {
-            // Check if the IP of the player is banned.
-            if (client.Connection != null && _bannedIps.Contains(client.Connection.EndPoint.Address))
-            {
-                return GameJoinResult.FromError(GameJoinError.Banned);
-            }
-
-            var player = client.Player;
-
-            // Check if;
-            // - The player is already in this game.
-            // - The game is full.
-            if (player?.Game != this && _players.Count >= Options.MaxPlayers)
-            {
-                return GameJoinResult.FromError(GameJoinError.GameFull);
-            }
-
-            if (GameState == GameStates.Starting || GameState == GameStates.Started)
-            {
-                return GameJoinResult.FromError(GameJoinError.GameStarted);
-            }
-
-            if (GameState == GameStates.Destroyed)
-            {
-                return GameJoinResult.FromError(GameJoinError.GameDestroyed);
-            }
-
-            var isNew = false;
-
-            if (player == null || player.Game != this)
-            {
-                var clientPlayer = new ClientPlayer(_serviceProvider.GetRequiredService<ILogger<ClientPlayer>>(), client, this);
-
-                if (!_clientManager.Validate(client))
-                {
-                    return GameJoinResult.FromError(GameJoinError.InvalidClient);
-                }
-
-                isNew = true;
-                player = clientPlayer;
-                client.Player = clientPlayer;
-            }
-
-            // Check current player state.
-            if (player.Limbo == LimboStates.NotLimbo)
-            {
-                return GameJoinResult.FromError(GameJoinError.InvalidLimbo);
-            }
-
-            if (GameState == GameStates.Ended)
-            {
-                await HandleJoinGameNext(player, isNew);
-                return GameJoinResult.CreateSuccess(player);
-            }
-
-            await HandleJoinGameNew(player, isNew);
-            return GameJoinResult.CreateSuccess(player);
         }
 
         public async ValueTask HandleEndGame(IMessageReader message, GameOverReason gameOverReason)
@@ -179,6 +97,30 @@ namespace Impostor.Server.Net.State
             await SendToAllExceptAsync(message, playerId);
         }
 
+        public async ValueTask<GameJoinResult> AddClientAsync(ClientBase client)
+        {
+            var hasLock = false;
+
+            try
+            {
+                hasLock = await _clientAddLock.WaitAsync(TimeSpan.FromMinutes(1));
+
+                if (hasLock)
+                {
+                    return await AddClientSafeAsync(client);
+                }
+            }
+            finally
+            {
+                if (hasLock)
+                {
+                    _clientAddLock.Release();
+                }
+            }
+
+            return GameJoinResult.FromError(GameJoinError.InvalidClient);
+        }
+
         private async ValueTask HandleJoinGameNew(ClientPlayer sender, bool isNew)
         {
             _logger.LogInformation("{0} - Player {1} ({2}) is joining.", Code, sender.Client.Name, sender.Client.Id);
@@ -201,6 +143,85 @@ namespace Impostor.Server.Net.State
                 await SendToAsync(message, sender.Client.Id);
                 await BroadcastJoinMessage(message, true, sender);
             }
+        }
+
+        private async ValueTask<GameJoinResult> AddClientSafeAsync(ClientBase client)
+        {
+            // Check if the IP of the player is banned.
+            if (_bannedIps.Contains(client.Connection.EndPoint.Address))
+            {
+                return GameJoinResult.FromError(GameJoinError.Banned);
+            }
+
+            var player = client.Player;
+
+            // Check if;
+            // - The player is already in this game.
+            // - The game is full.
+            if (player?.Game != this && _players.Count >= Options.MaxPlayers)
+            {
+                return GameJoinResult.FromError(GameJoinError.GameFull);
+            }
+
+            if (GameState == GameStates.Starting || GameState == GameStates.Started)
+            {
+                return GameJoinResult.FromError(GameJoinError.GameStarted);
+            }
+
+            if (GameState == GameStates.Destroyed)
+            {
+                return GameJoinResult.FromError(GameJoinError.GameDestroyed);
+            }
+
+            if (Host != null)
+            {
+                foreach (var hostMod in Host.Client.Mods)
+                {
+                    if (hostMod.Side == PluginSide.Both && client.Mods.All(clientMod => hostMod.Id != clientMod.Id))
+                    {
+                        return GameJoinResult.CreateCustomError($"You are missing {hostMod.Id} - {hostMod.Version}");
+                    }
+                }
+
+                foreach (var clientMod in client.Mods)
+                {
+                    if (clientMod.Side == PluginSide.Both && Host.Client.Mods.All(hostMod => clientMod.Id != hostMod.Id))
+                    {
+                        return GameJoinResult.CreateCustomError($"Host of this game is missing {clientMod.Id} - {clientMod.Version}");
+                    }
+                }
+            }
+
+            var isNew = false;
+
+            if (player == null || player.Game != this)
+            {
+                var clientPlayer = new ClientPlayer(_serviceProvider.GetRequiredService<ILogger<ClientPlayer>>(), client, this);
+
+                if (!_clientManager.Validate(client))
+                {
+                    return GameJoinResult.FromError(GameJoinError.InvalidClient);
+                }
+
+                isNew = true;
+                player = clientPlayer;
+                client.Player = clientPlayer;
+            }
+
+            // Check current player state.
+            if (player.Limbo == LimboStates.NotLimbo)
+            {
+                return GameJoinResult.FromError(GameJoinError.InvalidLimbo);
+            }
+
+            if (GameState == GameStates.Ended)
+            {
+                await HandleJoinGameNext(player, isNew);
+                return GameJoinResult.CreateSuccess(player);
+            }
+
+            await HandleJoinGameNew(player, isNew);
+            return GameJoinResult.CreateSuccess(player);
         }
 
         private async ValueTask HandleJoinGameNext(ClientPlayer sender, bool isNew)

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Net;
+using System.Numerics;
 using Impostor.Api.Games;
+using Impostor.Api.Net.Inner;
 
 namespace Impostor.Api.Net.Messages
 {
@@ -72,7 +74,7 @@ namespace Impostor.Api.Net.Messages
         void Write(string value);
 
         /// <summary>
-        ///     Writes a <see cref="IPAddress"/> to the message.
+        ///     Writes a <see cref="IPAddress" /> to the message.
         /// </summary>
         /// <param name="value">Value to write.</param>
         void Write(IPAddress value);
@@ -106,6 +108,10 @@ namespace Impostor.Api.Net.Messages
         void WriteBytesAndSize(byte[] bytes, int length);
 
         void WriteBytesAndSize(byte[] bytes, int offset, int length);
+
+        void Write(IInnerNetObject innerNetObject);
+
+        void Write(Vector2 vector);
 
         /// <summary>
         ///     Starts a new message.

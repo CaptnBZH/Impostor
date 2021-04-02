@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Impostor.Api;
-using Impostor.Api.Innersloth;
 using Impostor.Api.Net;
 using Impostor.Api.Net.Inner.Objects;
 using Impostor.Api.Net.Messages;
+using Impostor.Api.Net.Messages.Rpcs;
 using Impostor.Server.Net.Inner.Objects.Components;
 using Impostor.Server.Net.State;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,85 +44,16 @@ namespace Impostor.Server.Net.Inner.Objects
             return _allPlayers.TryGetValue(id, out var player) ? player : null;
         }
 
-        public override ValueTask HandleRpc(ClientPlayer sender, ClientPlayer? target, RpcCalls call, IMessageReader reader)
-        {
-            switch (call)
-            {
-                case RpcCalls.SetTasks:
-                {
-                    if (!sender.IsHost)
-                    {
-                        throw new ImpostorCheatException($"Client sent {nameof(RpcCalls.SetTasks)} but was not a host");
-                    }
-
-                    if (target != null)
-                    {
-                        throw new ImpostorCheatException($"Client sent {nameof(RpcCalls.SetTasks)} to a specific player instead of broadcast");
-                    }
-
-                    var playerId = reader.ReadByte();
-                    var taskTypeIds = reader.ReadBytesAndSize();
-
-                    SetTasks(playerId, taskTypeIds);
-                    break;
-                }
-
-                case RpcCalls.UpdateGameData:
-                {
-                    if (!sender.IsHost)
-                    {
-                        throw new ImpostorCheatException($"Client sent {nameof(RpcCalls.SetTasks)} but was not a host");
-                    }
-
-                    if (target != null)
-                    {
-                        throw new ImpostorCheatException($"Client sent {nameof(RpcCalls.SetTasks)} to a specific player instead of broadcast");
-                    }
-
-                    while (reader.Position < reader.Length)
-                    {
-                        using var message = reader.ReadMessage();
-                        var player = GetPlayerById(message.Tag);
-                        if (player != null)
-                        {
-                            player.Deserialize(message);
-                        }
-                        else
-                        {
-                            var playerInfo = new InnerPlayerInfo(message.Tag);
-
-                            playerInfo.Deserialize(reader);
-
-                            if (!_allPlayers.TryAdd(playerInfo.PlayerId, playerInfo))
-                            {
-                                throw new ImpostorException("Failed to add player to InnerGameData.");
-                            }
-                        }
-                    }
-
-                    break;
-                }
-
-                default:
-                {
-                    _logger.LogWarning("{0}: Unknown rpc call {1}", nameof(InnerGameData), call);
-                    break;
-                }
-            }
-
-            return default;
-        }
-
-        public override bool Serialize(IMessageWriter writer, bool initialState)
+        public override ValueTask<bool> SerializeAsync(IMessageWriter writer, bool initialState)
         {
             throw new NotImplementedException();
         }
 
-        public override void Deserialize(IClientPlayer sender, IClientPlayer? target, IMessageReader reader, bool initialState)
+        public override async ValueTask DeserializeAsync(IClientPlayer sender, IClientPlayer? target, IMessageReader reader, bool initialState)
         {
-            if (!sender.IsHost)
+            if (!await ValidateHost(CheatContext.Deserialize, sender))
             {
-                throw new ImpostorCheatException($"Client attempted to send data for {nameof(InnerGameData)} as non-host");
+                return;
             }
 
             if (initialState)
@@ -148,15 +79,69 @@ namespace Impostor.Server.Net.Inner.Objects
             }
         }
 
-        internal void AddPlayer(InnerPlayerControl control)
+        public override async ValueTask<bool> HandleRpcAsync(ClientPlayer sender, ClientPlayer? target, RpcCalls call, IMessageReader reader)
+        {
+            if (!await ValidateHost(call, sender))
+            {
+                return false;
+            }
+
+            switch (call)
+            {
+                case RpcCalls.SetTasks:
+                {
+                    Rpc29SetTasks.Deserialize(reader, out var playerId, out var taskTypeIds);
+                    SetTasks(playerId, taskTypeIds);
+                    break;
+                }
+
+                case RpcCalls.UpdateGameData:
+                {
+                    while (reader.Position < reader.Length)
+                    {
+                        using var message = reader.ReadMessage();
+                        var player = GetPlayerById(message.Tag);
+                        if (player != null)
+                        {
+                            player.Deserialize(message);
+                        }
+                        else
+                        {
+                            var playerInfo = new InnerPlayerInfo(message.Tag);
+
+                            playerInfo.Deserialize(reader);
+
+                            if (!_allPlayers.TryAdd(playerInfo.PlayerId, playerInfo))
+                            {
+                                throw new ImpostorException("Failed to add player to InnerGameData.");
+                            }
+                        }
+                    }
+
+                    break;
+                }
+
+                case RpcCalls.CustomRpc:
+                    return await HandleCustomRpc(reader, _game);
+
+                default:
+                    return await UnregisteredCall(call, sender);
+            }
+
+            return true;
+        }
+
+        internal InnerPlayerInfo? AddPlayer(InnerPlayerControl control)
         {
             var playerId = control.PlayerId;
             var playerInfo = new InnerPlayerInfo(control.PlayerId);
 
             if (_allPlayers.TryAdd(playerId, playerInfo))
             {
-                control.PlayerInfo = playerInfo;
+                return playerInfo;
             }
+
+            return null;
         }
 
         private void SetTasks(byte playerId, ReadOnlyMemory<byte> taskTypeIds)

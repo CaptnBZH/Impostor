@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Impostor.Api;
 using Impostor.Api.Events;
 using Impostor.Api.Events.Managers;
 using Impostor.Server.Events.Register;
@@ -28,7 +27,7 @@ namespace Impostor.Server.Events
         }
 
         /// <inheritdoc />
-        public IDisposable RegisterListener<TListener>(TListener listener, Func<Func<Task>, Task> invoker = null)
+        public IDisposable RegisterListener<TListener>(TListener listener, Func<Func<Task>, Task>? invoker = null)
             where TListener : IEventListener
         {
             if (listener == null)
@@ -90,10 +89,6 @@ namespace Impostor.Server.Events
                 {
                     await eventListener.InvokeAsync(handler, @event, _serviceProvider);
                 }
-            }
-            catch (ImpostorCheatException)
-            {
-                throw;
             }
             catch (Exception e)
             {

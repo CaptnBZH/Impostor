@@ -1,5 +1,4 @@
-﻿using System.IO;
-using Impostor.Api.Innersloth;
+﻿using Impostor.Api.Innersloth;
 
 namespace Impostor.Api.Net.Messages.C2S
 {
@@ -8,20 +7,22 @@ namespace Impostor.Api.Net.Messages.C2S
         public static void Serialize(IMessageWriter writer, GameOptionsData gameOptionsData)
         {
             writer.StartMessage(MessageFlags.HostGame);
-
-            using (var memory = new MemoryStream())
-            using (var writerBin = new BinaryWriter(memory))
-            {
-                gameOptionsData.Serialize(writerBin, GameOptionsData.LatestVersion);
-                writer.WriteBytesAndSize(memory.ToArray());
-            }
-
+            gameOptionsData.Serialize(writer);
             writer.EndMessage();
         }
 
-        public static GameOptionsData Deserialize(IMessageReader reader)
+        /// <summary>
+        ///     Deserialize a packet.
+        /// </summary>
+        /// <param name="reader"><see cref="IMessageReader" /> with <see cref="IMessageReader.Tag" /> 0.</param>
+        /// <param name="chatType">The chat type selected in the client of the player.</param>
+        /// <returns>Deserialized <see cref="GameOptionsData" />.</returns>
+        public static GameOptionsData Deserialize(IMessageReader reader, out ChatType chatType)
         {
-            return GameOptionsData.DeserializeCreate(reader);
+            var gameOptionsData = GameOptionsData.DeserializeCreate(reader);
+            chatType = (ChatType)reader.ReadByte();
+
+            return gameOptionsData;
         }
     }
 }

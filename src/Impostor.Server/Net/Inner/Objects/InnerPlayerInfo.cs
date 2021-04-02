@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using Impostor.Api;
 using Impostor.Api.Games;
 using Impostor.Api.Innersloth;
+using Impostor.Api.Innersloth.Customization;
 using Impostor.Api.Net.Messages;
 
 namespace Impostor.Server.Net.Inner.Objects
@@ -13,19 +15,19 @@ namespace Impostor.Server.Net.Inner.Objects
             PlayerId = playerId;
         }
 
-        public InnerPlayerControl Controller { get; internal set; }
+        public InnerPlayerControl? Controller { get; internal set; }
 
         public byte PlayerId { get; }
 
-        public string PlayerName { get; internal set; }
+        public string PlayerName { get; internal set; } = string.Empty;
 
-        public byte ColorId { get; internal set; }
+        public ColorType Color { get; internal set; }
 
-        public uint HatId { get; internal set; }
+        public HatType Hat { get; internal set; }
 
-        public uint PetId { get; internal set; }
+        public PetType Pet { get; internal set; }
 
-        public uint SkinId { get; internal set; }
+        public SkinType Skin { get; internal set; }
 
         public bool Disconnected { get; internal set; }
 
@@ -35,18 +37,18 @@ namespace Impostor.Server.Net.Inner.Objects
 
         public DeathReason LastDeathReason { get; internal set; }
 
-        public List<InnerGameData.TaskInfo> Tasks { get; internal set; }
+        public List<InnerGameData.TaskInfo> Tasks { get; internal set; } = new List<InnerGameData.TaskInfo>(0);
 
         public DateTimeOffset LastMurder { get; set; }
 
-        public bool CanMurder(IGame game)
+        public bool CanMurder(IGame game, IDateTimeProvider dateTimeProvider)
         {
             if (!IsImpostor)
             {
                 return false;
             }
 
-            return DateTimeOffset.UtcNow.Subtract(LastMurder).TotalSeconds >= game.Options.KillCooldown;
+            return dateTimeProvider.UtcNow.Subtract(LastMurder).TotalSeconds >= game.Options.KillCooldown;
         }
 
         public void Serialize(IMessageWriter writer)
@@ -57,10 +59,10 @@ namespace Impostor.Server.Net.Inner.Objects
         public void Deserialize(IMessageReader reader)
         {
             PlayerName = reader.ReadString();
-            ColorId = reader.ReadByte();
-            HatId = reader.ReadPackedUInt32();
-            PetId = reader.ReadPackedUInt32();
-            SkinId = reader.ReadPackedUInt32();
+            Color = (ColorType)reader.ReadByte();
+            Hat = (HatType)reader.ReadPackedUInt32();
+            Pet = (PetType)reader.ReadPackedUInt32();
+            Skin = (SkinType)reader.ReadPackedUInt32();
             var flag = reader.ReadByte();
             Disconnected = (flag & 1) > 0;
             IsImpostor = (flag & 2) > 0;

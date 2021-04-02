@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using System.Net;
 using System.Threading.Tasks;
 using Impostor.Api;
@@ -7,14 +6,15 @@ using Impostor.Api.Games;
 using Impostor.Api.Innersloth;
 using Impostor.Api.Net;
 using Impostor.Api.Net.Inner;
-using Impostor.Api.Net.Inner.Objects;
+using Impostor.Api.Net.Messages;
+using Impostor.Hazel;
 using Impostor.Server.Net.Inner;
 
 namespace Impostor.Server.Net.State
 {
     internal partial class Game : IGame
     {
-        IClientPlayer IGame.Host => Host;
+        IClientPlayer? IGame.Host => Host;
 
         IGameNet IGame.GameNet => GameNet;
 
@@ -25,7 +25,7 @@ namespace Impostor.Server.Net.State
 
         public async ValueTask SyncSettingsAsync()
         {
-            if (Host.Character == null)
+            if (Host?.Character == null)
             {
                 throw new ImpostorException("Attempted to set infected when the host was not spawned.");
             }
@@ -47,23 +47,15 @@ namespace Impostor.Server.Net.State
             }
         }
 
-        public async ValueTask SetInfectedAsync(IEnumerable<IInnerPlayerControl> players)
+        public async ValueTask SetPrivacyAsync(bool isPublic)
         {
-            if (Host.Character == null)
+            IsPublic = isPublic;
+
+            using (var writer = MessageWriter.Get(MessageType.Reliable))
             {
-                throw new ImpostorException("Attempted to set infected when the host was not spawned.");
-            }
+                WriteAlterGameMessage(writer, false, IsPublic);
 
-            using (var writer = StartRpc(Host.Character.NetId, RpcCalls.SetInfected))
-            {
-                writer.Write((byte)Host.Character.NetId);
-
-                foreach (var player in players)
-                {
-                    writer.Write((byte)player.PlayerId);
-                }
-
-                await FinishRpcAsync(writer);
+                await SendToAllAsync(writer);
             }
         }
     }

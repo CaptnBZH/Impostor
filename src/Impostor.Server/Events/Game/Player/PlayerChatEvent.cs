@@ -22,5 +22,7 @@ namespace Impostor.Server.Events.Player
         public IInnerPlayerControl PlayerControl { get; }
 
         public string Message { get; }
+
+        public bool IsCancelled { get; set; }
     }
 }

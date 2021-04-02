@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using Impostor.Api.Innersloth;
 using Impostor.Api.Net.Messages;
+using Impostor.Api.Reactor;
 
 namespace Impostor.Api.Net
 {
@@ -28,6 +29,11 @@ namespace Impostor.Api.Net
         string Name { get; }
 
         /// <summary>
+        ///     Gets mods sent by client in modded handshake.
+        /// </summary>
+        ISet<Mod> Mods { get; }
+
+        /// <summary>
         ///     Gets the connection of the client.
         /// </summary>
         /// <remarks>
@@ -51,25 +57,27 @@ namespace Impostor.Api.Net
         IDictionary<object, object> Items { get; }
 
         /// <summary>
-        ///     Gets or sets the current game data of the <see cref="IClient"/>.
+        ///     Gets the current game data of the <see cref="IClient" />.
         /// </summary>
         IClientPlayer? Player { get; }
+
+        ValueTask<bool> ReportCheatAsync(CheatContext context, string message);
 
         ValueTask HandleMessageAsync(IMessageReader message, MessageType messageType);
 
         ValueTask HandleDisconnectAsync(string reason);
 
         /// <summary>
-        ///     Disconnect the client with a <see cref="DisconnectReason"/>.
+        ///     Disconnect the client with a <see cref="DisconnectReason" />.
         /// </summary>
         /// <param name="reason">
         ///     The message to show to the player.
         /// </param>
         /// <param name="message">
-        ///     Only used when <see cref="reason"/> is set to <see cref="DisconnectReason.Custom"/>.
+        ///     Only used when <paramref name="reason" /> is set to <see cref="DisconnectReason.Custom" />.
         /// </param>
         /// <returns>
-        ///     A <see cref="ValueTask"/> representing the asynchronous operation.
+        ///     A <see cref="ValueTask" /> representing the asynchronous operation.
         /// </returns>
         ValueTask DisconnectAsync(DisconnectReason reason, string? message = null);
     }

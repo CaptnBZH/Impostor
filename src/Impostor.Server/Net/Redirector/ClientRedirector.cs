@@ -1,14 +1,15 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Impostor.Api.Innersloth;
 using Impostor.Api.Net.Messages;
 using Impostor.Api.Net.Messages.C2S;
 using Impostor.Api.Net.Messages.S2C;
+using Impostor.Api.Reactor;
 using Impostor.Hazel;
 using Impostor.Server.Config;
 using Impostor.Server.Net.Hazel;
 using Impostor.Server.Net.Manager;
 using Serilog;
-using ILogger = Serilog.ILogger;
 
 namespace Impostor.Server.Net.Redirector
 {
@@ -22,11 +23,13 @@ namespace Impostor.Server.Net.Redirector
 
         public ClientRedirector(
             string name,
+            int gameVersion,
             HazelConnection connection,
+            ISet<Mod> mods,
             ClientManager clientManager,
             INodeProvider nodeProvider,
             INodeLocator nodeLocator)
-            : base(name, connection)
+            : base(name, gameVersion, connection, mods)
         {
             _clientManager = clientManager;
             _nodeProvider = nodeProvider;
@@ -51,13 +54,10 @@ namespace Impostor.Server.Net.Redirector
 
                 case MessageFlags.JoinGame:
                 {
-                    Message01JoinGameC2S.Deserialize(
-                        reader,
-                        out var gameCode,
-                        out _);
+                    Message01JoinGameC2S.Deserialize(reader, out var gameCode);
 
                     using var packet = MessageWriter.Get(MessageType.Reliable);
-                    var endpoint = await _nodeLocator.FindAsync(GameCodeParser.IntToGameName(gameCode));
+                    var endpoint = await _nodeLocator.FindAsync(gameCode);
                     if (endpoint == null)
                     {
                         Message01JoinGameS2C.SerializeError(packet, false, DisconnectReason.GameMissing);

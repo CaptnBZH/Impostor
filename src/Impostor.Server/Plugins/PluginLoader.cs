@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 using Impostor.Api.Plugins;
-using Impostor.Server.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +24,8 @@ namespace Impostor.Server.Plugins
             // Add the plugins and libraries.
             var pluginPaths = new List<string>(config.Paths);
             var libraryPaths = new List<string>(config.LibraryPaths);
+            CheckPaths(pluginPaths);
+            CheckPaths(libraryPaths);
 
             var rootFolder = Directory.GetCurrentDirectory();
 
@@ -46,7 +47,7 @@ namespace Impostor.Server.Plugins
 
                 // Some plugins may be referencing another Impostor.Api version and try to load it.
                 // We want to only use the one shipped with the server.
-                if (name.Name.Equals("Impostor.Api"))
+                if (name.Name == "Impostor.Api")
                 {
                     return typeof(IPlugin).Assembly;
                 }
@@ -103,22 +104,33 @@ namespace Impostor.Server.Plugins
                     plugin.First()));
             }
 
-            foreach (var plugin in plugins.Where(plugin => plugin.Startup != null))
+            foreach (var plugin in plugins)
             {
-                plugin.Startup.ConfigureHost(builder);
+                plugin.Startup?.ConfigureHost(builder);
             }
 
             builder.ConfigureServices(services =>
             {
                 services.AddHostedService(provider => ActivatorUtilities.CreateInstance<PluginLoaderService>(provider, plugins));
 
-                foreach (var plugin in plugins.Where(plugin => plugin.Startup != null))
+                foreach (var plugin in plugins)
                 {
-                    plugin.Startup.ConfigureServices(services);
+                    plugin.Startup?.ConfigureServices(services);
                 }
             });
 
             return builder;
+        }
+
+        private static void CheckPaths(IEnumerable<string> paths)
+        {
+            foreach (var path in paths)
+            {
+                if (!Directory.Exists(path))
+                {
+                    Logger.Warning("Path {path} was specified in the PluginLoader configuration, but this folder doesn't exist!", path);
+                }
+            }
         }
 
         private static void RegisterAssemblies(

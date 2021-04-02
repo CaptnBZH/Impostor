@@ -4,6 +4,8 @@ FROM mcr.microsoft.com/dotnet/sdk:5.0 AS build
 # https://github.com/containerd/containerd/blob/master/platforms/platforms.go#L17
 ARG TARGETARCH
 
+ARG VERSIONSUFFIX="docker"
+
 WORKDIR /source
 
 # Copy csproj and restore.
